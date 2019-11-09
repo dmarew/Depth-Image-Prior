@@ -120,4 +120,7 @@ p = get_params(OPT_OVER, net, net_input)
 optimize(OPTIMIZER, p, closure, LR, num_iter)
 
 out_np = torch_to_np(net(net_input))
+# visualize the result
 plot_image_grid([out_np], factor=5)
+# save the result
+np.save("testing_inpainting_V2_result", out_np)
