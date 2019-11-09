@@ -25,6 +25,9 @@ def get_opencv_depth_images(left_images,
 
         disparity = disparity.astype('float32')/16
         mask = disparity==(minDisparity - 1)
+        np.save('data/dataset/disparity/%d.npy'%(index), disparity)
+        np.save('data/dataset/mask/%d.npy'%(index), mask.astype('uint8'))
+
         disparity -= disparity.min()
         disparity /= disparity.max()
 
@@ -34,6 +37,7 @@ def get_opencv_depth_images(left_images,
 
         cv2.imwrite('data/opencv-5-64/%d.png'%(index), disparity)
         cv2.imwrite('data/opencv-5-64/mask_%d.png'%(index), 255*mask.astype('uint8'))
+
         index += 1
     return masks, disparities
 
@@ -43,14 +47,26 @@ def depth_xml_to_images(depth_xml_paths):
         cv_file = cv2.FileStorage(depth_xml_path, cv2.FILE_STORAGE_READ)
         image = cv_file.getNode("depth").mat()
         images.append(image)
-    return images
+def psnr(input_depth_image, target_depth_image):
+    mse = np.mean( (input_depth_image - target_depth_image)** 2)
+    return 20 * np.log(255.0 / np.sqrt(mse))
 
 
 if __name__=='__main__':
 
+#    ground_truth_image = cv2.imread('data/dataset/groud_truth/0.png', 0)[:, 42:]
+#    print('g: ', ground_truth_image.shape)
+#    target_image = cv2.imread('data/dataset/disparity/0.png', 0)
+#    print('target: ', target_image.shape)
+#    output_image = cv2.resize(cv2.imread('results/inpainting.png', 0)
+#    print('out: ', output_image.shape)
+#    print(psnr(target_image, ground_truth_image))
+#    print(psnr(output_image, ground_truth_image))
+
+
 
     focal_length = 615
-    baseline = 100.
+    baseline = 100.0
     left_images   = glob.glob('data/input/left/*') #['data/tsukuba_l.png']#
     right_images  = glob.glob('data/input/right/*')#['data/tsukuba_r.png']#
     left_images.sort()
