@@ -56,7 +56,7 @@ OPTIMIZER = 'adam'
 INPUT = 'noise'
 input_depth = 32
 LR = 0.01
-num_iter = 6001
+num_iter = 1 #6001
 param_noise = False
 show_every = 50
 figsize = 5
@@ -123,7 +123,6 @@ optimizer = torch.optim.Adam(p, lr=LR)
 
 for i in range(num_iter):
     optimizer.zero_grad()
-    # closure()
 
     # add noise to network parameters
     if param_noise:
@@ -158,4 +157,9 @@ out_np = torch_to_np(net(net_input))
 # visualize the result
 plot_image_grid([out_np], factor=5)
 # save the result
-np.save("results/testing_inpainting_V2_result", out_np)
+np.save('results/testing_inpainting_V2_result', out_np)
+
+# print(out_np.shape)
+# import cv2
+# visualiztion_output = ((out_np/np.max(out_np))*255).astype('uint8')
+# cv2.imwrite('results/testing_inpainting_V2_result.png', visualiztion_output)
