@@ -123,4 +123,4 @@ out_np = torch_to_np(net(net_input))
 # visualize the result
 plot_image_grid([out_np], factor=5)
 # save the result
-np.save("testing_inpainting_V2_result", out_np)
+np.save("results/testing_inpainting_V2_result", out_np)
