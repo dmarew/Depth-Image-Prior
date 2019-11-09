@@ -35,8 +35,8 @@ img_mask_pil, img_mask_np = get_image(mask_path, imsize)
 img_mask_np = (img_mask_np==0).astype('float32')
 img_mask_pil = np_to_pil(img_mask_np)
 # Center_crop the image and mask
-img_mask_pil = crop_image(img_mask_pil, dim_div_by)
-img_pil      = crop_image(img_pil,      dim_div_by)
+# img_mask_pil = crop_image(img_mask_pil, dim_div_by)
+# img_pil      = crop_image(img_pil,      dim_div_by)
 
 img_np      = pil_to_np(img_pil)
 img_mask_np = pil_to_np(img_mask_pil)
@@ -62,7 +62,7 @@ show_every = 50
 figsize = 5
 reg_noise_std = 0.03
 
-net = skip(input_depth, 1, # img_np.shape[0]
+net = skip(input_depth, 1,
            num_channels_down = [128] * 5,
            num_channels_up =   [128] * 5,
            num_channels_skip =    [128] * 5,
@@ -85,39 +85,74 @@ mse = torch.nn.MSELoss().type(dtype)
 img_var = np_to_torch(img_np).type(dtype)
 mask_var = np_to_torch(img_mask_np).type(dtype)
 
-i = 0
-def closure():
-
-    global i
-
-    if param_noise:
-        for n in [x for x in net.parameters() if len(x.size()) == 4]:
-            n = n + n.detach().clone().normal_() * n.std() / 50
-
-    net_input = net_input_saved
-    if reg_noise_std > 0:
-        net_input = net_input_saved + (noise.normal_() * reg_noise_std)
-
-
-    out = net(net_input)
-
-    total_loss = mse(out * mask_var, img_var * mask_var)
-    total_loss.backward()
-
-    print ('Iteration %05d    Loss %f' % (i, total_loss.item()), '\r', end='')
-    if  PLOT and i % show_every == 0:
-        out_np = torch_to_np(out)
-#         plot_image_grid([np.clip(out_np, 0, 1)], factor=figsize, nrow=1)
-
-    i += 1
-
-    return total_loss
+# i = 0
+# def closure():
+#
+#     global i
+#
+#     if param_noise:
+#         for n in [x for x in net.parameters() if len(x.size()) == 4]:
+#             n = n + n.detach().clone().normal_() * n.std() / 50
+#
+#     net_input = net_input_saved
+#     if reg_noise_std > 0:
+#         net_input = net_input_saved + (noise.normal_() * reg_noise_std)
+#
+#
+#     out = net(net_input)
+#
+#     total_loss = mse(out * mask_var, img_var * mask_var)
+#     total_loss.backward()
+#
+#     print ('Iteration %05d    Loss %f' % (i, total_loss.item()), '\r', end='')
+#     if  PLOT and i % show_every == 0:
+#         out_np = torch_to_np(out)
+# #         plot_image_grid([np.clip(out_np, 0, 1)], factor=figsize, nrow=1)
+#
+#     i += 1
+#
+#     return total_loss
 
 net_input_saved = net_input.detach().clone()
 noise = net_input.detach().clone()
 
 p = get_params(OPT_OVER, net, net_input)
-optimize(OPTIMIZER, p, closure, LR, num_iter)
+
+print('Starting optimization with ADAM')
+optimizer = torch.optim.Adam(p, lr=LR)
+
+for i in range(num_iter):
+    optimizer.zero_grad()
+    # closure()
+
+    # add noise to network parameters
+    if param_noise:
+        for n in [x for x in net.parameters() if len(x.size()) == 4]:
+            n = n + n.detach().clone().normal_() * n.std() / 50
+
+    # add noise to network input
+    net_input = net_input_saved
+    if reg_noise_std > 0:
+        net_input = net_input_saved + (noise.normal_() * reg_noise_std)
+
+    # get network output
+    out = net(net_input)
+
+    # Calculate loss
+    total_loss = mse(out * mask_var, img_var * mask_var)
+    # backprop
+    total_loss.backward()
+
+    # visualize
+    print('Iteration %05d    Loss %f' % (i, total_loss.item()), '\r', end='')
+    if PLOT and i % show_every == 0:
+        out_np = torch_to_np(out)
+    #         plot_image_grid([np.clip(out_np, 0, 1)], factor=figsize, nrow=1)
+
+    # update the optimizer
+    optimizer.step()
+
+# optimize(OPTIMIZER, p, closure, LR, num_iter)
 
 out_np = torch_to_np(net(net_input))
 # visualize the result
