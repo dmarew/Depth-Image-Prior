@@ -17,7 +17,8 @@ right_img_np = pil_to_np(right_img_pil)[0:3, :, :]
 right_img_np = np.moveaxis(right_img_np, 0, -1)
 
 # Load the disparity image from left to right
-disparity_img_pil = load("data/ground_truth/disparity/left/tsukuba_disparity_L_00001.png")
+# disparity_img_pil = load("data/ground_truth/disparity/left/tsukuba_disparity_L_00001.png")
+disparity_img_pil = load("data/ground_truth/disparity/right/tsukuba_disparity_R_00001.png")
 
 disparity_img_np = (pil_to_np(disparity_img_pil)*255).squeeze().astype(int)
 
@@ -44,10 +45,9 @@ for row in range(right_img_np.shape[0]):
         if sudo_col >= right_img_np.shape[1] or sudo_col < 0:
             continue
         sudo_right[row, sudo_col, :] = left_img_np[row, col, :]
-# sudo_right[]
 
-fig.add_subplot(rows, columns, 4)
-plt.imshow(sudo_right)
+# fig.add_subplot(rows, columns, 4)
+# plt.imshow(sudo_right)
 # plt.show()
 
 import torch
@@ -59,17 +59,17 @@ import torch
 
 left_im = torch.from_numpy(np.moveaxis(left_img_np, 2, 0)).unsqueeze(0)
 right_im = torch.from_numpy(np.moveaxis(right_img_np, 2, 0)).unsqueeze(0)
-print(left_im.shape)
 B, C, H, W = left_im.shape
 row_space = torch.linspace(-1, 1, H).unsqueeze(1).repeat(1, W).unsqueeze(0)
 col_space = torch.linspace(-1, 1, W).unsqueeze(0).repeat(H, 1).unsqueeze(0)
+
 print(row_space.shape, col_space.shape)
 # print(row_space[:5, :5])
 # print(col_space[:5, :5])
 
 disp = torch.from_numpy(pil_to_np(disparity_img_pil))
 
-col_space += disp
+col_space += disp*(255/W)*2
 
 grid = torch.zeros((1, H, W, 2))
 grid[:, :, :, 1] = row_space
@@ -81,11 +81,10 @@ img = np.moveaxis(sudo_right.numpy().squeeze(), 0, -1)
 
 fig.add_subplot(rows, columns, 5)
 plt.imshow(img)
-plt.show()
-print(img.shape)
-# print(disp.shape)
 
-# sudo_right_im = torch.nn.functional.grid_sample(left_im, disp)
+fig.add_subplot(rows, columns, 6)
+plt.imshow(col_space.squeeze().numpy())
+plt.show()
 
 
 

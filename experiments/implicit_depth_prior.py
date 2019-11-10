@@ -48,7 +48,7 @@ img_mask_var = np_to_torch(img_mask_np).type(dtype)
 
 # Load the left and right images
 left_img = load("data/input/left/tsukuba_daylight_L_00001.png")
-right_img = load("data/input/right/tsukuba_daylight_L_00001.png")
+right_img = load("data/input/right/tsukuba_daylight_R_00001.png")
 
 # visualize
 plot_image_grid([img_np, img_mask_np, img_mask_np*img_np], 3,11)
