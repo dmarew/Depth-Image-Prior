@@ -71,19 +71,33 @@ disp = torch.from_numpy(pil_to_np(disparity_img_pil))
 
 col_space += disp*(255/W)*2
 
+fig.add_subplot(rows, columns, 4)
+plt.imshow(col_space.squeeze().numpy())
+
+# create occlusion mask
+occlusion_mask = torch.ones(left_im.shape)
+for row in range(H):
+    max_val = -2
+    for col in range(W):
+        if col_space[:, row, col] <= max_val:
+            occlusion_mask[:, :, row, col] = 0
+        else:
+            max_val = col_space[:, row, col]
+
+fig.add_subplot(rows, columns, 5)
+plt.imshow(np.moveaxis(occlusion_mask.numpy().squeeze(), 0, -1))
+
 grid = torch.zeros((1, H, W, 2))
 grid[:, :, :, 1] = row_space
 grid[:, :, :, 0] = col_space
 sudo_right = torch.nn.functional.grid_sample(left_im, grid)
 
-img = np.moveaxis(sudo_right.numpy().squeeze(), 0, -1)
-# img = np.moveaxis(left_im.numpy().squeeze(), 0, -1)
+sudo_right = sudo_right*occlusion_mask
 
-fig.add_subplot(rows, columns, 5)
-plt.imshow(img)
+img = np.moveaxis(sudo_right.numpy().squeeze(), 0, -1)
 
 fig.add_subplot(rows, columns, 6)
-plt.imshow(col_space.squeeze().numpy())
+plt.imshow(img)
 plt.show()
 
 
