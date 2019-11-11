@@ -24,34 +24,37 @@ dim_div_by = 64
 
 # TODO: get the images and normalize them then after training denormalize them
 
-# Get image path
-img_path  = 'data/dataset/disparity/0.png'#'data/inpainting/kate.png'
-# Get mask path
-mask_path = 'data/dataset/mask/mask_0.png'#'data/inpainting/kate_mask.png'
-
-# Get image
-img_pil, img_np = get_image(img_path, imsize)
-# get mask
-img_mask_pil, img_mask_np = get_image(mask_path, imsize)
-
-img_mask_np = (img_mask_np==0).astype('float32')
-img_mask_pil = np_to_pil(img_mask_np)
-# Center_crop the image and mask
-# img_mask_pil = crop_image(img_mask_pil, dim_div_by)
-# img_pil      = crop_image(img_pil,      dim_div_by)
-
-img_np      = pil_to_np(img_pil)
-img_mask_np = pil_to_np(img_mask_pil)
-
-# Make the mask a torch tensor
-img_mask_var = np_to_torch(img_mask_np).type(dtype)
+# # Get image path
+# img_path  = 'data/dataset/disparity/0.png'#'data/inpainting/kate.png'
+# # Get mask path
+# mask_path = 'data/dataset/mask/mask_0.png'#'data/inpainting/kate_mask.png'
+#
+# # Get image
+# img_pil, img_np = get_image(img_path, imsize)
+# # get mask
+# img_mask_pil, img_mask_np = get_image(mask_path, imsize)
+#
+# img_mask_np = (img_mask_np==0).astype('float32')
+# img_mask_pil = np_to_pil(img_mask_np)
+# # Center_crop the image and mask
+# # img_mask_pil = crop_image(img_mask_pil, dim_div_by)
+# # img_pil      = crop_image(img_pil,      dim_div_by)
+#
+# img_np      = pil_to_np(img_pil)
+# img_mask_np = pil_to_np(img_mask_pil)
+#
+# # Make the mask a torch tensor
+# img_mask_var = np_to_torch(img_mask_np).type(dtype)
 
 # Load the left and right images
-left_img = load("data/input/left/tsukuba_daylight_L_00001.png")
-right_img = load("data/input/right/tsukuba_daylight_R_00001.png")
+left_img_pil = load("data/input/left/tsukuba_daylight_L_00001.png")
+right_img_pil = load("data/input/right/tsukuba_daylight_R_00001.png")
+
+left_img_np = pil_to_np(left_img_pil)
+right_img_np = pil_to_np(right_img_pil)
 
 # visualize
-plot_image_grid([img_np, img_mask_np, img_mask_np*img_np], 3,11)
+# plot_image_grid([img_np, img_mask_np, img_mask_np*img_np], 3,11)
 
 # Training params
 pad = 'reflection'
@@ -79,7 +82,7 @@ net = skip(input_depth, 1,
 
 
 net = net.type(dtype)
-net_input = get_noise(input_depth, INPUT, img_np.shape[1:]).type(dtype)
+net_input = get_noise(input_depth, INPUT, left_img_np.shape[1:]).type(dtype)
 
 # Compute number of parameters
 s  = sum(np.prod(list(p.size())) for p in net.parameters())
@@ -88,8 +91,10 @@ print ('Number of params: %d' % s)
 # Loss
 mse = torch.nn.MSELoss().type(dtype)
 
-img_var = np_to_torch(img_np).type(dtype)
-mask_var = np_to_torch(img_mask_np).type(dtype)
+# img_var = np_to_torch(img_np).type(dtype)
+# mask_var = np_to_torch(img_mask_np).type(dtype)
+left_img_torch = torch.from_numpy(left_img_np).unsqueeze(0).type(dtype)
+right_img_torch = torch.from_numpy(right_img_np).unsqueeze(0).type(dtype)
 
 net_input_saved = net_input.detach().clone()
 noise = net_input.detach().clone()
@@ -98,6 +103,21 @@ p = get_params(OPT_OVER, net, net_input)
 
 print('Starting optimization with ADAM')
 optimizer = torch.optim.Adam(p, lr=LR)
+
+# define the warp function
+def warp(input_img, disp_img, dtype):
+    B, C, H, W = input_img.shape
+    row_space = torch.linspace(-1, 1, H).unsqueeze(1).repeat(1, W).unsqueeze(0).type(dtype)
+    col_space = torch.linspace(-1, 1, W).unsqueeze(0).repeat(H, 1).unsqueeze(0).type(dtype)
+
+    col_space += disp_img.squeeze()
+
+    grid = torch.zeros((1, H, W, 2)).type(dtype)
+    grid[:, :, :, 1] = row_space
+    grid[:, :, :, 0] = col_space
+    output_img = torch.nn.functional.grid_sample(input_img, grid)
+
+    return output_img
 
 for i in range(num_iter):
     optimizer.zero_grad()
@@ -116,7 +136,8 @@ for i in range(num_iter):
     out = net(net_input)
 
     # Calculate loss
-    total_loss = mse(out * mask_var, img_var * mask_var)
+    # total_loss = mse(out * mask_var, img_var * mask_var)
+    total_loss = mse(warp(left_img_torch, out, dtype), right_img_torch)
     # backprop
     total_loss.backward()
 
@@ -135,9 +156,9 @@ out_np = torch_to_np(net(net_input))
 # visualize the result
 plot_image_grid([out_np], factor=5)
 # save the result
-np.save('results/testing_inpainting_V2_result', out_np)
+np.save('results/implicit_depth_prior_result', out_np)
 
 # save the result for visualization
 import cv2
 visualiztion_output = ((out_np/np.max(out_np))*255).astype('uint8').squeeze()
-cv2.imwrite('results/testing_inpainting_V2_result.png', visualiztion_output)
+cv2.imwrite('results/implicit_depth_prior_result.png', visualiztion_output)
