@@ -22,29 +22,6 @@ PLOT = True
 imsize = -1
 dim_div_by = 64
 
-# TODO: get the images and normalize them then after training denormalize them
-
-# # Get image path
-# img_path  = 'data/dataset/disparity/0.png'#'data/inpainting/kate.png'
-# # Get mask path
-# mask_path = 'data/dataset/mask/mask_0.png'#'data/inpainting/kate_mask.png'
-#
-# # Get image
-# img_pil, img_np = get_image(img_path, imsize)
-# # get mask
-# img_mask_pil, img_mask_np = get_image(mask_path, imsize)
-#
-# img_mask_np = (img_mask_np==0).astype('float32')
-# img_mask_pil = np_to_pil(img_mask_np)
-# # Center_crop the image and mask
-# # img_mask_pil = crop_image(img_mask_pil, dim_div_by)
-# # img_pil      = crop_image(img_pil,      dim_div_by)
-#
-# img_np      = pil_to_np(img_pil)
-# img_mask_np = pil_to_np(img_mask_pil)
-#
-# # Make the mask a torch tensor
-# img_mask_var = np_to_torch(img_mask_np).type(dtype)
 
 # Load the left and right images
 left_img_pil = load("data/input/left/tsukuba_daylight_L_00001.png")

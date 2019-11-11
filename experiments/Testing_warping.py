@@ -7,6 +7,12 @@ sys.path.append(os.getcwd())
 
 from utils.inpainting_utils import *
 
+# quick test
+# HC_disp_pil = load('data/dataset/disparity/0.png')
+# HC_disp_np = pil_to_np(HC_disp_pil)
+# plt.imshow(HC_disp_np.squeeze())
+# plt.show()
+
 # Load the left and right images
 left_img_pil = load("data/input/left/tsukuba_daylight_L_00001.png")
 right_img_pil = load("data/input/right/tsukuba_daylight_R_00001.png")
@@ -76,8 +82,6 @@ warped_depth1, _ = warp(left_disp.unsqueeze(0), right_disp)
 warped_depth1 = warped_depth1.numpy().squeeze() - right_disp.numpy().squeeze()
 warped_depth2, _ = warp(right_disp.unsqueeze(0), -left_disp)
 warped_depth2 = warped_depth2.numpy().squeeze() - left_disp.numpy().squeeze()
-# warped_depth2, _ = warp(right_im, -left_disp)
-# warped_depth2 = np.moveaxis(warped_depth2.numpy().squeeze(), 0, -1)
 
 fig.add_subplot(rows, columns, 5)
 plt.imshow(np.moveaxis(occlusion_mask.numpy().squeeze(), 0, -1))
