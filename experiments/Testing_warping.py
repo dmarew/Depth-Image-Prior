@@ -83,11 +83,19 @@ warped_depth1 = warped_depth1.numpy().squeeze() - right_disp.numpy().squeeze()
 warped_depth2, _ = warp(right_disp.unsqueeze(0), -left_disp)
 warped_depth2 = warped_depth2.numpy().squeeze() - left_disp.numpy().squeeze()
 
+epsilon = 0.01
+mask1 = np.zeros(warped_depth1.shape)
+mask1[np.abs(warped_depth1) < epsilon] = 1
+mask2 = np.zeros(warped_depth2.shape)
+mask2[np.abs(warped_depth2) < epsilon] = 1
+
 fig.add_subplot(rows, columns, 5)
-plt.imshow(np.moveaxis(occlusion_mask.numpy().squeeze(), 0, -1))
+# plt.imshow(np.moveaxis(occlusion_mask.numpy().squeeze(), 0, -1))
+plt.imshow(mask1)
 
 fig.add_subplot(rows, columns, 6)
-plt.imshow(img)
+# plt.imshow(img)
+plt.imshow(mask2)
 
 fig.add_subplot(rows, columns, 7)
 plt.imshow(warped_depth1)
@@ -96,6 +104,8 @@ fig.add_subplot(rows, columns, 8)
 plt.imshow(warped_depth2)
 
 plt.show()
+
+np.save('results/right_disp_mask', mask1)
 
 
 

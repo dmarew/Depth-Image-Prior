@@ -41,9 +41,7 @@ img_np      = pil_to_np(img_pil)
 img_mask_np = pil_to_np(img_mask_pil)
 
 # create mask from image
-# print(img_np.shape, img_mask_np.shape)
 img_mask_np = np.ones(img_np.shape)
-# img_mask_np[img_np == 0 or img_np > 0.6] = 0
 img_mask_np[img_np == 0] = 0.0
 img_mask_np[img_np > 0.6] = 0.0
 

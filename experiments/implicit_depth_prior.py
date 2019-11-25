@@ -30,6 +30,9 @@ right_img_pil = load("data/input/right/tsukuba_daylight_R_00001.png")
 left_img_np = pil_to_np(left_img_pil)
 right_img_np = pil_to_np(right_img_pil)
 
+# temp get training mask from ground truth
+mask = np.load("results/right_disp_mask.npy")
+
 # visualize
 # plot_image_grid([img_np, img_mask_np, img_mask_np*img_np], 3,11)
 
@@ -42,13 +45,15 @@ OPTIMIZER = 'adam'
 INPUT = 'noise'
 input_depth = 32
 LR = 0.01
-num_iter = 6001
+num_iter = 10001
 param_noise = False
-show_every = 50
+Debug_visualization = True
+show_every = 500
 figsize = 5
 reg_noise_std = 0.03
 
-net = skip(input_depth, 1,
+# there is probably an easy way to copy this
+net = skip(input_depth, 2,
            num_channels_down = [128] * 5,
            num_channels_up =   [128] * 5,
            num_channels_skip =    [128] * 5,
@@ -57,9 +62,10 @@ net = skip(input_depth, 1,
            need_sigmoid=True, need_bias=True, pad=pad, act_fun='LeakyReLU').type(dtype)
 
 
-
 net = net.type(dtype)
+
 net_input = get_noise(input_depth, INPUT, left_img_np.shape[1:]).type(dtype)
+net_right_input = get_noise(input_depth, INPUT, right_img_np.shape[1:]).type(dtype)
 
 # Compute number of parameters
 s  = sum(np.prod(list(p.size())) for p in net.parameters())
@@ -68,14 +74,18 @@ print ('Number of params: %d' % s)
 # Loss
 mse = torch.nn.MSELoss().type(dtype)
 
-# img_var = np_to_torch(img_np).type(dtype)
-# mask_var = np_to_torch(img_mask_np).type(dtype)
 left_img_torch = torch.from_numpy(left_img_np).unsqueeze(0).type(dtype)
 right_img_torch = torch.from_numpy(right_img_np).unsqueeze(0).type(dtype)
+
+mask_torch = torch.from_numpy(mask).type(dtype)
 
 net_input_saved = net_input.detach().clone()
 noise = net_input.detach().clone()
 
+net_right_input_saved = net_right_input.detach().clone()
+noise_right = net_right_input.detach().clone()
+
+# need to figure out this part
 p = get_params(OPT_OVER, net, net_input)
 
 print('Starting optimization with ADAM')
@@ -99,43 +109,89 @@ def warp(input_img, disp_img, dtype):
 for i in range(num_iter):
     optimizer.zero_grad()
 
-    # add noise to network parameters
+    # Add noise to network parameters
     if param_noise:
         for n in [x for x in net.parameters() if len(x.size()) == 4]:
             n = n + n.detach().clone().normal_() * n.std() / 50
 
-    # add noise to network input
+    # Add noise to network input
     net_input = net_input_saved
     if reg_noise_std > 0:
         net_input = net_input_saved + (noise.normal_() * reg_noise_std)
 
-    # get network output
+    # Get network output
     out = net(net_input)
+    left_disparity = out[:, 0, :, :].unsqueeze(1)
+    right_disparity = out[:, 1, :, :].unsqueeze(1)
+
+    # Note left disparity tells me how to map the right image to look like the left image
+    # Similarly right disparity tells me how to map the left image to look like the right image
+
+    # need to fix the naming to make things more clear
+
+    accuracy_weight = 0.9
+
+    left_right_disparity_consistency_loss = mse(warp(left_disparity, -right_disparity, dtype), right_disparity)
+    right_left_disparity_consistency_loss = mse(warp(right_disparity, left_disparity, dtype), left_disparity)
+
+    right_disparity_occlusion_mask = torch.ones(left_disparity.shape).type(dtype) - \
+                                     torch.abs(warp(left_disparity, -right_disparity, dtype) - right_disparity)
+    left_disparity_occlusion_mask = torch.ones(right_disparity.shape).type(dtype) - \
+                                    torch.abs(warp(right_disparity, left_disparity, dtype) - left_disparity)
+
+    epsilon = 0.01
+
+    right_disparity_occlusion_mask = torch.where(right_disparity_occlusion_mask < 1 - epsilon,
+                                       torch.zeros_like(right_disparity_occlusion_mask),
+                                       torch.ones_like(right_disparity_occlusion_mask))
+    left_disparity_occlusion_mask = torch.where(left_disparity_occlusion_mask < 1 - epsilon,
+                                      torch.zeros_like(left_disparity_occlusion_mask),
+                                      torch.ones_like(left_disparity_occlusion_mask))
 
     # Calculate loss
-    # total_loss = mse(out * mask_var, img_var * mask_var)
-    total_loss = mse(warp(left_img_torch, out, dtype), right_img_torch)
+    left_disparity_loss = mse(warp(left_img_torch, left_disparity, dtype) * left_disparity_occlusion_mask,
+                              right_img_torch * left_disparity_occlusion_mask)
+    right_disparity_loss = mse(warp(right_img_torch, -right_disparity, dtype) * right_disparity_occlusion_mask,
+                               left_img_torch * right_disparity_occlusion_mask)
+
+    total_loss = (((left_disparity_loss + right_disparity_loss) * accuracy_weight)
+                  + ((left_right_disparity_consistency_loss + right_left_disparity_consistency_loss)
+                  * (1 - accuracy_weight)))/4
     # backprop
     total_loss.backward()
 
     # visualize
     print('Iteration %05d    Loss %f' % (i, total_loss.item()), '\r', end='')
-    if PLOT and i % show_every == 0:
-        out_np = torch_to_np(out)
-    #         plot_image_grid([np.clip(out_np, 0, 1)], factor=figsize, nrow=1)
+    if PLOT and i % show_every == 0 and Debug_visualization:
+        left_disparity_np = torch_to_np(left_disparity)
+        right_disparity_np = torch_to_np(right_disparity)
+        left_mask_np = torch_to_np(left_disparity_occlusion_mask)
+        right_mask_np = torch_to_np(right_disparity_occlusion_mask)
+        plot_image_grid([np.clip(left_disparity_np, 0, 1),
+                         np.clip(right_disparity_np, 0, 1),
+                         np.clip(left_mask_np, 0, 1),
+                         np.clip(right_mask_np, 0, 1)], factor=figsize, nrow=2)
 
     # update the optimizer
     optimizer.step()
 
-# optimize(OPTIMIZER, p, closure, LR, num_iter)
+out = net(net_input)
+left_disparity = out[:, 0, :, :].unsqueeze(1)
+right_disparity = out[:, 1, :, :].unsqueeze(1)
 
-out_np = torch_to_np(net(net_input))
+left_disparity_np = torch_to_np(left_disparity)
+right_disparity_np = torch_to_np(right_disparity)
+
+# out_np = torch_to_np(net(net_input))
 # visualize the result
-plot_image_grid([out_np], factor=5)
+plot_image_grid([left_disparity_np, right_disparity_np], factor=5)
 # save the result
-np.save('results/implicit_depth_prior_result', out_np)
+np.save('results/implicit_depth_prior_left_result', left_disparity_np)
+np.save('results/implicit_depth_prior_right_result', right_disparity_np)
 
 # save the result for visualization
 import cv2
-visualiztion_output = ((out_np/np.max(out_np))*255).astype('uint8').squeeze()
-cv2.imwrite('results/implicit_depth_prior_result.png', visualiztion_output)
+visualiztion_output_left = ((left_disparity_np/np.max(left_disparity_np))*255).astype('uint8').squeeze()
+visualiztion_output_right = ((right_disparity_np/np.max(right_disparity_np))*255).astype('uint8').squeeze()
+cv2.imwrite('results/implicit_depth_prior_left_result.png', visualiztion_output_left)
+cv2.imwrite('results/implicit_depth_prior_right_result.png', visualiztion_output_right)

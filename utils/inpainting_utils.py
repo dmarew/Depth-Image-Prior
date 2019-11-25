@@ -20,3 +20,6 @@ def get_bernoulli_mask(for_image, zero_fraction=0.95):
     img_mask = np_to_pil(img_mask_np)
     
     return img_mask
+def psnr(input_depth_image, target_depth_image):
+    mse = np.mean( (input_depth_image - target_depth_image)** 2)
+    return 20 * np.log(255.0 / np.sqrt(mse))
