@@ -55,57 +55,55 @@ def warp(input_img, disp_img):
 
     col_space += disp_img * (255 / W) * 2
 
-    # create occlusion mask
-    occlusion_mask = torch.ones(left_im.shape)
-    for row in range(H):
-        max_val = -2
-        for col in range(W):
-            if col_space[:, row, col] <= max_val:
-                occlusion_mask[:, :, row, col] = 0
-            else:
-                max_val = col_space[:, row, col]
-
     grid = torch.zeros((1, H, W, 2))
     grid[:, :, :, 1] = row_space
     grid[:, :, :, 0] = col_space
     output_img = torch.nn.functional.grid_sample(input_img, grid)
 
-    return output_img, occlusion_mask
+    return output_img
 
-sudo_right, occlusion_mask = warp(left_im, right_disp)
 
-sudo_right = sudo_right*occlusion_mask
+warped_depth_left = warp(right_disp.unsqueeze(0), -left_disp)
+warped_depth_left = warped_depth_left.numpy().squeeze() - left_disp.numpy().squeeze()
 
-img = np.moveaxis(sudo_right.numpy().squeeze(), 0, -1)
-
-warped_depth1, _ = warp(left_disp.unsqueeze(0), right_disp)
-warped_depth1 = warped_depth1.numpy().squeeze() - right_disp.numpy().squeeze()
-warped_depth2, _ = warp(right_disp.unsqueeze(0), -left_disp)
-warped_depth2 = warped_depth2.numpy().squeeze() - left_disp.numpy().squeeze()
+warped_depth_right = warp(left_disp.unsqueeze(0), right_disp)
+warped_depth_right = warped_depth_right.numpy().squeeze() - right_disp.numpy().squeeze()
 
 epsilon = 0.01
-mask1 = np.zeros(warped_depth1.shape)
-mask1[np.abs(warped_depth1) < epsilon] = 1
-mask2 = np.zeros(warped_depth2.shape)
-mask2[np.abs(warped_depth2) < epsilon] = 1
+
+mask_left = np.zeros(warped_depth_left.shape)
+mask_left[np.abs(warped_depth_left) < epsilon] = 1
+
+mask_right = np.zeros(warped_depth_right.shape)
+mask_right[np.abs(warped_depth_right) < epsilon] = 1
+
+sudo_left = warp(right_im, -left_disp)
+sudo_right = warp(left_im, right_disp)
+
+sudo_left = sudo_left*torch.from_numpy(mask_left.astype('float32'))
+sudo_right = sudo_right*torch.from_numpy(mask_right.astype('float32'))
+
+sudo_left_img = np.moveaxis(sudo_left.numpy().squeeze(), 0, -1)
+sudo_right_img = np.moveaxis(sudo_right.numpy().squeeze(), 0, -1)
 
 fig.add_subplot(rows, columns, 5)
 # plt.imshow(np.moveaxis(occlusion_mask.numpy().squeeze(), 0, -1))
-plt.imshow(mask1)
+plt.imshow(mask_left)
 
 fig.add_subplot(rows, columns, 6)
 # plt.imshow(img)
-plt.imshow(mask2)
+plt.imshow(mask_right)
 
 fig.add_subplot(rows, columns, 7)
-plt.imshow(warped_depth1)
+plt.imshow(sudo_left_img)
 
 fig.add_subplot(rows, columns, 8)
-plt.imshow(warped_depth2)
+plt.imshow(sudo_right_img)
 
 plt.show()
 
-np.save('results/right_disp_mask', mask1)
+np.save('results/left_disp_mask', mask_left)
+np.save('results/right_disp_mask', mask_right)
 
 
 

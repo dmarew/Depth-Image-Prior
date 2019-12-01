@@ -45,10 +45,10 @@ OPTIMIZER = 'adam'
 INPUT = 'noise'
 input_depth = 32
 LR = 0.01
-num_iter = 10001
+num_iter = 3001
 param_noise = False
 Debug_visualization = True
-show_every = 500
+show_every = 1000
 figsize = 5
 reg_noise_std = 0.03
 
@@ -129,16 +129,23 @@ for i in range(num_iter):
 
     # need to fix the naming to make things more clear
 
-    accuracy_weight = 0.9
+    accuracy_weight = 0.90
 
     left_right_disparity_consistency_loss = mse(warp(left_disparity, -right_disparity, dtype), right_disparity)
     right_left_disparity_consistency_loss = mse(warp(right_disparity, left_disparity, dtype), left_disparity)
+
+    consistency_loss = (left_right_disparity_consistency_loss + right_left_disparity_consistency_loss)/2
+
+    # gamma = 10
+    # right_disparity_occlusion_mask = torch.exp(-gamma * torch.abs(warp(left_disparity, -right_disparity, dtype) - right_disparity))
+    # left_disparity_occlusion_mask = torch.exp(-gamma * torch.abs(warp(right_disparity, left_disparity, dtype) - left_disparity))
 
     right_disparity_occlusion_mask = torch.ones(left_disparity.shape).type(dtype) - \
                                      torch.abs(warp(left_disparity, -right_disparity, dtype) - right_disparity)
     left_disparity_occlusion_mask = torch.ones(right_disparity.shape).type(dtype) - \
                                     torch.abs(warp(right_disparity, left_disparity, dtype) - left_disparity)
 
+    # convert to zero-one mask
     epsilon = 0.01
 
     right_disparity_occlusion_mask = torch.where(right_disparity_occlusion_mask < 1 - epsilon,
@@ -154,14 +161,19 @@ for i in range(num_iter):
     right_disparity_loss = mse(warp(right_img_torch, -right_disparity, dtype) * right_disparity_occlusion_mask,
                                left_img_torch * right_disparity_occlusion_mask)
 
-    total_loss = (((left_disparity_loss + right_disparity_loss) * accuracy_weight)
-                  + ((left_right_disparity_consistency_loss + right_left_disparity_consistency_loss)
-                  * (1 - accuracy_weight)))/4
+    accuracy_loss = (left_disparity_loss + right_disparity_loss)/2
+
+    total_loss = (accuracy_loss * accuracy_weight) + (consistency_loss * (1 - accuracy_weight))
+    # total_loss = (((left_disparity_loss + right_disparity_loss) * accuracy_weight)
+    #               + ((left_right_disparity_consistency_loss + right_left_disparity_consistency_loss)
+    #                  * (1 - accuracy_weight))) / 4
+
     # backprop
     total_loss.backward()
 
     # visualize
-    print('Iteration %05d    Loss %f' % (i, total_loss.item()), '\r', end='')
+    print('Iteration %05d    Accuracy Loss %f, Consistency Loss %f, Total Loss %f' %
+          (i, accuracy_loss.item(), consistency_loss.item(), total_loss.item()), '\r', end='')
     if PLOT and i % show_every == 0 and Debug_visualization:
         left_disparity_np = torch_to_np(left_disparity)
         right_disparity_np = torch_to_np(right_disparity)
