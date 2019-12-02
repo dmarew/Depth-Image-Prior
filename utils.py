@@ -11,35 +11,81 @@ def get_opencv_depth_images(left_images,
                             numDisparities=32,
                             blockSize=13,
                             minDisparity=10):
-    depth_images = []
-    masks = []
-    disparities = []
-    index = 0
-    for L_path, R_path in zip(left_images, right_images):
-        print(L_path, R_path)
-        imgL = cv2.resize(cv2.imread(L_path, 0), (384, 288))
-        imgR = cv2.resize(cv2.imread(R_path, 0), (384, 288))
-        stereo = cv2.StereoSGBM_create(minDisparity=minDisparity, numDisparities=numDisparities, blockSize=blockSize)
-        disparity = stereo.compute(imgL,imgR)
-        disparity = disparity[:, numDisparities + minDisparity:]
+	depth_images = []
+	masks = []
+	disparities = []
+	index = 0
+	noise_typ = "gauss"
+	for L_path, R_path in zip(left_images, right_images):
+			print(L_path, R_path)
+			imgL = cv2.imread(L_path)
+			imgR = cv2.imread(R_path)
 
-        disparity = disparity.astype('float32')/16
-        mask = disparity==(minDisparity - 1)
-        np.save('data/dataset/disparity/%d.npy'%(index), disparity)
-        np.save('data/dataset/mask/%d.npy'%(index), mask.astype('uint8'))
+			imgL_noisy = cv2.cvtColor(noisy(imgL, noise_typ), cv2.COLOR_BGR2GRAY)
+			imgR_noisy = cv2.cvtColor(noisy(imgR, noise_typ), cv2.COLOR_BGR2GRAY)
 
-        disparity -= disparity.min()
-        disparity /= disparity.max()
+			plt.imshow(imgL_noisy)
+			plt.show()
+			stereo = cv2.StereoSGBM_create(minDisparity=minDisparity, numDisparities=numDisparities, blockSize=blockSize)
+			disparity = stereo.compute(imgL_noisy,imgR_noisy)
+			disparity = disparity[:, numDisparities + minDisparity:]
 
-        disparity *= 255
-        masks.append(mask)
-        disparities.append(disparity)
+			disparity = disparity//16
+			mask = disparity==(minDisparity - 1)
+			#np.save('data/dataset/disparity/%d.npy'%(index), disparity)
+			#np.save('data/dataset/mask/%d.npy'%(index), mask.astype('uint8'))
 
-        cv2.imwrite('data/opencv-5-64/%d.png'%(index), disparity)
-        cv2.imwrite('data/opencv-5-64/mask_%d.png'%(index), 255*mask.astype('uint8'))
+			#disparity -= disparity.min()
+			#disparity /= disparity.max()
 
-        index += 1
-    return masks, disparities
+			#disparity *= 255
+			masks.append(mask)
+			disparities.append(disparity)
+
+			cv2.imwrite('data/new/noisy_%d.png'%(index), disparity)
+			cv2.imwrite('data/new/noisy_mask_%d.png'%(index), 255*mask.astype('uint8'))
+
+			index += 1
+	return masks, disparities
+
+def noisy(image, noise_typ):
+	if noise_typ == "gauss":
+		row,col,ch= image.shape
+		mean = 10
+		var = 100
+		sigma = var**0.5
+		gauss = np.random.normal(mean,sigma,(row,col,ch))
+		gauss = gauss.reshape(row,col,ch)
+		noisy = image + gauss
+		return noisy.astype('uint8')
+	elif noise_typ == "s&p":
+		row,col,ch = image.shape
+		s_vs_p = 0.5
+		amount = 0.004
+		out = np.copy(image)
+		# Salt mode
+		num_salt = np.ceil(amount * image.size * s_vs_p)
+		coords = [np.random.randint(0, i - 1, int(num_salt))
+				    for i in image.shape]
+		out[coords] = 1
+
+		# Pepper mode
+		num_pepper = np.ceil(amount* image.size * (1. - s_vs_p))
+		coords = [np.random.randint(0, i - 1, int(num_pepper))
+				    for i in image.shape]
+		out[coords] = 0
+		return out
+	elif noise_typ == "poisson":
+		vals = len(np.unique(image))
+		vals = 2 ** np.ceil(np.log2(vals))
+		noisy = np.random.poisson(image * vals) / float(vals)
+		return noisy
+	elif noise_typ =="speckle":
+		row,col,ch = image.shape
+		gauss = np.random.randn(row,col,ch)
+		gauss = gauss.reshape(row,col,ch)        
+		noisy = image + image * gauss
+		return noisy
 
 def depth_xml_to_images(depth_xml_paths):
     images = []
@@ -49,7 +95,7 @@ def depth_xml_to_images(depth_xml_paths):
         images.append(image)
 def psnr(input_depth_image, target_depth_image):
     mse = np.mean( (input_depth_image - target_depth_image)** 2)
-    return 20 * np.log(255.0 / np.sqrt(mse))
+    return 20 * np.log(1.0 / np.sqrt(mse))
 
 
 if __name__=='__main__':
