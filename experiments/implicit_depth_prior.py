@@ -55,7 +55,7 @@ param_noise = False
 Debug_visualization = True
 show_every = 1000
 figsize = 5
-reg_noise_std = 0.03
+reg_noise_std = 0.05 # 0.03
 
 # there is probably an easy way to copy this
 net = skip(input_depth, 2,
@@ -134,7 +134,7 @@ for i in range(num_iter):
 
     # need to fix the naming to make things more clear
 
-    accuracy_weight = 0.75
+    accuracy_weight = 0.60
 
     # left_right_disparity_consistency_loss = mse(warp(left_disparity, -right_disparity, dtype), right_disparity)
     # right_left_disparity_consistency_loss = mse(warp(right_disparity, left_disparity, dtype), left_disparity)
@@ -151,7 +151,7 @@ for i in range(num_iter):
                                     torch.abs(warp(right_disparity, left_disparity, dtype) - left_disparity)
 
     # convert to zero-one mask
-    epsilon = 0.005
+    epsilon = 0.01
 
     right_disparity_occlusion_mask = torch.where(right_disparity_occlusion_mask < 1 - epsilon,
                                      torch.zeros_like(right_disparity_occlusion_mask),
