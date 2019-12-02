@@ -26,9 +26,14 @@ dim_div_by = 64
 # Load the left and right images
 left_img_pil = load("data/input/left/tsukuba_daylight_L_00001.png")
 right_img_pil = load("data/input/right/tsukuba_daylight_R_00001.png")
+# left_img_pil = load("data/input/left/tsukuba_daylight_L_00200.png")
+# right_img_pil = load("data/input/right/tsukuba_daylight_R_00200.png")
 
 left_img_np = pil_to_np(left_img_pil)
 right_img_np = pil_to_np(right_img_pil)
+
+left_img_np = left_img_np[:3, :, :]
+right_img_np = right_img_np[:3, :, :]
 
 # temp get training mask from ground truth
 mask = np.load("results/right_disp_mask.npy")
@@ -45,7 +50,7 @@ OPTIMIZER = 'adam'
 INPUT = 'noise'
 input_depth = 32
 LR = 0.01
-num_iter = 3001
+num_iter = 6001
 param_noise = False
 Debug_visualization = True
 show_every = 1000
@@ -129,12 +134,12 @@ for i in range(num_iter):
 
     # need to fix the naming to make things more clear
 
-    accuracy_weight = 0.90
+    accuracy_weight = 0.75
 
-    left_right_disparity_consistency_loss = mse(warp(left_disparity, -right_disparity, dtype), right_disparity)
-    right_left_disparity_consistency_loss = mse(warp(right_disparity, left_disparity, dtype), left_disparity)
-
-    consistency_loss = (left_right_disparity_consistency_loss + right_left_disparity_consistency_loss)/2
+    # left_right_disparity_consistency_loss = mse(warp(left_disparity, -right_disparity, dtype), right_disparity)
+    # right_left_disparity_consistency_loss = mse(warp(right_disparity, left_disparity, dtype), left_disparity)
+    #
+    # consistency_loss = (left_right_disparity_consistency_loss + right_left_disparity_consistency_loss)/2
 
     # gamma = 10
     # right_disparity_occlusion_mask = torch.exp(-gamma * torch.abs(warp(left_disparity, -right_disparity, dtype) - right_disparity))
@@ -146,16 +151,39 @@ for i in range(num_iter):
                                     torch.abs(warp(right_disparity, left_disparity, dtype) - left_disparity)
 
     # convert to zero-one mask
-    epsilon = 0.01
+    epsilon = 0.005
 
     right_disparity_occlusion_mask = torch.where(right_disparity_occlusion_mask < 1 - epsilon,
-                                       torch.zeros_like(right_disparity_occlusion_mask),
-                                       torch.ones_like(right_disparity_occlusion_mask))
+                                     torch.zeros_like(right_disparity_occlusion_mask),
+                                     torch.ones_like(right_disparity_occlusion_mask))
     left_disparity_occlusion_mask = torch.where(left_disparity_occlusion_mask < 1 - epsilon,
-                                      torch.zeros_like(left_disparity_occlusion_mask),
-                                      torch.ones_like(left_disparity_occlusion_mask))
+                                    torch.zeros_like(left_disparity_occlusion_mask),
+                                    torch.ones_like(left_disparity_occlusion_mask))
 
-    # Calculate loss
+
+
+    right_consistency_mask = torch.ones(right_disparity.shape).type(dtype) - \
+                             torch.abs(warp(right_img_torch, -right_disparity, dtype) - left_img_torch).mean(1)
+    left_consistency_mask = torch.ones(left_disparity.shape).type(dtype) - \
+                            torch.abs(warp(left_img_torch, left_disparity, dtype) - right_img_torch).mean(1)
+
+    # convert to zero-one mask
+    right_consistency_mask = torch.where(right_consistency_mask < 1 - epsilon,
+                                                 torch.zeros_like(right_consistency_mask),
+                                                 torch.ones_like(right_consistency_mask))
+    left_consistency_mask = torch.where(left_consistency_mask < 1 - epsilon,
+                                                torch.zeros_like(left_consistency_mask),
+                                                torch.ones_like(left_consistency_mask))
+
+    # Calculate consistency loss
+    left_right_disparity_consistency_loss = mse(warp(left_disparity, -right_disparity, dtype) * right_consistency_mask,
+                                                right_disparity * right_consistency_mask)
+    right_left_disparity_consistency_loss = mse(warp(right_disparity, left_disparity, dtype) * left_consistency_mask,
+                                                left_disparity * left_consistency_mask)
+
+    consistency_loss = (left_right_disparity_consistency_loss + right_left_disparity_consistency_loss) / 2
+
+    # Calculate accuracy loss
     left_disparity_loss = mse(warp(left_img_torch, left_disparity, dtype) * left_disparity_occlusion_mask,
                               right_img_torch * left_disparity_occlusion_mask)
     right_disparity_loss = mse(warp(right_img_torch, -right_disparity, dtype) * right_disparity_occlusion_mask,
@@ -163,6 +191,7 @@ for i in range(num_iter):
 
     accuracy_loss = (left_disparity_loss + right_disparity_loss)/2
 
+    # calculate total loss
     total_loss = (accuracy_loss * accuracy_weight) + (consistency_loss * (1 - accuracy_weight))
     # total_loss = (((left_disparity_loss + right_disparity_loss) * accuracy_weight)
     #               + ((left_right_disparity_consistency_loss + right_left_disparity_consistency_loss)
@@ -179,10 +208,14 @@ for i in range(num_iter):
         right_disparity_np = torch_to_np(right_disparity)
         left_mask_np = torch_to_np(left_disparity_occlusion_mask)
         right_mask_np = torch_to_np(right_disparity_occlusion_mask)
+        left_con_mask_np = torch_to_np(left_consistency_mask)
+        right_con_mask_np = torch_to_np(right_consistency_mask)
         plot_image_grid([np.clip(left_disparity_np, 0, 1),
                          np.clip(right_disparity_np, 0, 1),
                          np.clip(left_mask_np, 0, 1),
-                         np.clip(right_mask_np, 0, 1)], factor=figsize, nrow=2)
+                         np.clip(right_mask_np, 0, 1),
+                         np.clip(left_con_mask_np, 0, 1),
+                         np.clip(right_con_mask_np, 0, 1)], factor=figsize, nrow=2)
 
     # update the optimizer
     optimizer.step()
